@@ -16,6 +16,11 @@ class NewVisitorTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.browser.quit()
 
+    def check_for_row_in_list_table(self, row_text):
+        table = self.browser.find_element_by_id("id_list_table")
+        rows = table.find_elements_by_tag_name("tr")
+        self.assertIn(row_text, [row.text for row in rows])
+
     def test_can_start_a_list_and_retrieve_it_later(self):
         # Edith has heard about a cool new online to-do app. She goes
         # to check out its home page
@@ -37,10 +42,8 @@ class NewVisitorTest(unittest.TestCase):
         # "1: Buy peacock feathers" as an item in a to-do list
         inputbox.send_keys(Keys.ENTER)
         time.sleep(1)
-
-        table = self.browser.find_element_by_id("id_list_table")
-        rows = table.find_elements_by_tag_name("tr")
-        self.assertIn(f"1: {FIRST_ITEM_TEXT}", [row.text for row in rows])
+        self.check_for_row_in_list_table(f"1: {FIRST_ITEM_TEXT}")
+    
 
         # There is still a text box inviting her to add another item. She
         # enters "Use peacock feathers to make a fly"
@@ -50,10 +53,8 @@ class NewVisitorTest(unittest.TestCase):
         time.sleep(1)
 
         # The page updates again, and now shows both items on her list
-        table = self.browser.find_element_by_id('id_list_table')
-        rows = table.find_elements_by_tag_name('tr')
-        self.assertIn(f"1: {FIRST_ITEM_TEXT}", [row.text for row in rows])
-        self.assertIn(f"2: {SECOND_ITEM_TEXT}", [row.text for row in rows])
+        self.check_for_row_in_list_table(f"1: {FIRST_ITEM_TEXT}")
+        self.check_for_row_in_list_table(f"2: {SECOND_ITEM_TEXT}")
 
         # Edith wonders whether the site remembers her list. The she sees
         # that the site has generated a unique URL for her -- there is some
