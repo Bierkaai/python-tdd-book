@@ -1,6 +1,7 @@
 from email import header
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import WebDriverException
 
 from django.test import LiveServerTestCase
 
@@ -9,6 +10,12 @@ import time
 
 FIRST_ITEM_TEXT = "Buy peacock feathers"
 SECOND_ITEM_TEXT = "Use peacock feathers to make a fly"
+FRANCIS_FIRST_TEXT = "Buy milk"
+
+LIST_URL_REGEX = r"/lists/.+"
+
+# How many seconds should we wait for the page to load before failing the test?
+MAX_WAIT = 10
 
 
 class NewVisitorTest(LiveServerTestCase):
@@ -18,10 +25,18 @@ class NewVisitorTest(LiveServerTestCase):
     def tearDown(self) -> None:
         self.browser.quit()
 
-    def check_for_row_in_list_table(self, row_text):
-        table = self.browser.find_element_by_id("id_list_table")
-        rows = table.find_elements_by_tag_name("tr")
-        self.assertIn(row_text, [row.text for row in rows])
+    def wait_for_row_in_list_table(self, row_text):
+        start_time = time.time()
+        while True:
+            try:
+                table = self.browser.find_element_by_id("id_list_table")
+                rows = table.find_elements_by_tag_name("tr")
+                self.assertIn(row_text, [row.text for row in rows])
+                return
+            except (AssertionError, WebDriverException) as e:
+                if time.time() - start_time > MAX_WAIT:
+                    raise e
+                time.sleep(0.2)
 
     def test_can_start_a_list_and_retrieve_it_later(self):
         # Edith has heard about a cool new online to-do app. She goes
@@ -43,26 +58,65 @@ class NewVisitorTest(LiveServerTestCase):
         # When she hits "Enter", the page updates, and not the page lists
         # "1: Buy peacock feathers" as an item in a to-do list
         inputbox.send_keys(Keys.ENTER)
-        time.sleep(1)
-        self.check_for_row_in_list_table(f"1: {FIRST_ITEM_TEXT}")
-    
+        self.wait_for_row_in_list_table(f"1: {FIRST_ITEM_TEXT}")
 
         # There is still a text box inviting her to add another item. She
         # enters "Use peacock feathers to make a fly"
-        inputbox = self.browser.find_element_by_id('id_new_item')
+        inputbox = self.browser.find_element_by_id("id_new_item")
         inputbox.send_keys(SECOND_ITEM_TEXT)
         inputbox.send_keys(Keys.ENTER)
-        time.sleep(1)
 
         # The page updates again, and now shows both items on her list
-        self.check_for_row_in_list_table(f"1: {FIRST_ITEM_TEXT}")
-        self.check_for_row_in_list_table(f"2: {SECOND_ITEM_TEXT}")
-
-        # Edith wonders whether the site remembers her list. The she sees
-        # that the site has generated a unique URL for her -- there is some
-        # explanatory text to that effect.
-        self.fail('Finish the test!')
-
-        # She visits that URL - her to-do list is still there
+        self.wait_for_row_in_list_table(f"1: {FIRST_ITEM_TEXT}")
+        self.wait_for_row_in_list_table(f"2: {SECOND_ITEM_TEXT}")
 
         # Satisfied, she goes back to sleep
+
+    def test_multiple_users_can_start_lists_at_different_urls(self):
+        # Edith starts a new to-do list
+        self.browser.get(self.live_server_url)
+
+        # She enters a to-do item
+        inputbox = self.browser.find_element_by_id("id_new_item")
+        inputbox.send_keys(FIRST_ITEM_TEXT)
+        inputbox.send_keys(Keys.ENTER)
+
+        # It appears in the to-do list on the website
+        self.wait_for_row_in_list_table(f"1: {FIRST_ITEM_TEXT}")
+
+        # She notices that her list has a unique URL
+        edith_list_url = self.browser.current_url
+        self.assertRegex(edith_list_url, LIST_URL_REGEX)
+
+        # Now a new user, Francis comes along to the site.
+
+        ## We use a new browser session to make sure that no information
+        ## of Edith's is coming through from cookies etc
+        self.browser.quit()
+        self.browser = webdriver.Firefox()
+
+        # Francis visits the home page. There is no sign of Edith's list
+        self.browser.get(self.live_server_url)
+        page_text = self.browser.find_element_by_tag_name("body").text
+        self.assertNotIn(FIRST_ITEM_TEXT, page_text)
+        self.assertNotIn(SECOND_ITEM_TEXT, page_text)
+
+        # Francis startes a new list by entering a new item. He is less
+        # interesting than Edith
+        inputbox = self.browser.find_element_by_id("id_new_item")
+        inputbox.send_keys(FRANCIS_FIRST_TEXT)
+        inputbox.send_keys(Keys.ENTER)
+
+        self.wait_for_row_in_list_table(f"1: {FRANCIS_FIRST_TEXT}")
+
+        # Francis gets his own unique URL
+        francis_list_url = self.browser.current_url
+        self.assertRegex(francis_list_url, LIST_URL_REGEX)
+        self.assertNotEqual(francis_list_url, edith_list_url)
+
+        # Again , there is no trace of Edith's list
+        page_text = self.browser.find_element_by_tag_name('body').text
+        self.assertNotIn(FIRST_ITEM_TEXT, page_text)
+        self.assertIn(FRANCIS_FIRST_TEXT, page_text)
+
+        # Satisfied, they both go back to sleep
