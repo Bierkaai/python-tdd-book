@@ -13,6 +13,9 @@ NEW_ITEM_TEXT = "A new list item"
 FIRST_ITEM_TEXT = "The first (ever) list item"
 SECOND_ITEM_TEXT = "Item the second"
 
+OTHER_LIST_ITEM_1 = "other list item 1"
+OTHER_LIST_ITEM_2 = "other list item 2"
+
 
 class HomePageTest(TestCase):
     def test_root_url_resolves_to_home_page_view(self):
@@ -56,18 +59,27 @@ class ListAndItemModelTest(TestCase):
 
 class ListViewTest(TestCase):
     def test_uses_list_template(self):
-        response = self.client.get("/lists/the-only-list-in-the-world/")
+        list_ = List.objects.create()
+        response = self.client.get(f"/lists/{list_.id}/")
         self.assertTemplateUsed(response, "list.html")
 
-    def test_displays_all_items(self):
-        list_ = List.objects.create()
-        Item.objects.create(text=FIRST_ITEM_TEXT, list=list_)
-        Item.objects.create(text=SECOND_ITEM_TEXT, list=list_)
+    def test_displays_only_items_for_that_list(self):
+        correct_list = List.objects.create()
+        Item.objects.create(text=FIRST_ITEM_TEXT, list=correct_list)
+        Item.objects.create(text=SECOND_ITEM_TEXT, list=correct_list)
 
-        response = self.client.get("/lists/the-only-list-in-the-world/")
+        other_list = List.objects.create()
+        Item.objects.create(text=OTHER_LIST_ITEM_1, list=other_list)
+        Item.objects.create(text=OTHER_LIST_ITEM_2, list=other_list)
+
+
+        response = self.client.get(f"/lists/{correct_list.id}/")
 
         self.assertContains(response, FIRST_ITEM_TEXT)
         self.assertContains(response, SECOND_ITEM_TEXT)
+
+        self.assertNotContains(response, OTHER_LIST_ITEM_1)
+        self.assertNotContains(response, OTHER_LIST_ITEM_2)
 
 
 class NewListTest(TestCase):
