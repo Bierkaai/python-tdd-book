@@ -9,6 +9,8 @@ from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 import unittest
 import time
 
+import os
+
 FIRST_ITEM_TEXT = "Buy peacock feathers"
 SECOND_ITEM_TEXT = "Use peacock feathers to make a fly"
 FRANCIS_FIRST_TEXT = "Buy milk"
@@ -21,6 +23,9 @@ MAX_WAIT = 10
 
 class NewVisitorTest(StaticLiveServerTestCase):
     def setUp(self) -> None:
+        staging_server = os.environ.get('STAGING_SERVER')  
+        if staging_server:
+            self.live_server_url = 'http://' + staging_server
         self.browser = webdriver.Chrome()
 
     def tearDown(self) -> None:
